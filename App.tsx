@@ -12,7 +12,7 @@ const MODEL_NAME = 'gemini-2.0-flash-exp';
 
 // =========================================================================
 // 👇 API KEY
-const HARDCODED_API_KEY = "AIzaSyCDlOzXAjyNWOTev88Z6IUc9bm9af_QS5Q"; 
+const HARDCODED_API_KEY = "AIzaSyCoobyjiZOEk5ixcVzObJQQrlyk3bs0FMI"; 
 // =========================================================================
 
 const SYSTEM_INSTRUCTION = `
