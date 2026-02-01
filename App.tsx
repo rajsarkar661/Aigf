@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { GoogleGenAI, LiveServerMessage, Modality } from '@google/genai';
-import { Mic, MicOff, Power, Video, VideoOff, Heart, Sparkles, SwitchCamera, RefreshCw, Key, Settings, Trash2 } from 'lucide-react';
+import { Mic, MicOff, Power, Video, VideoOff, Heart, Sparkles, SwitchCamera, RefreshCw, AlertCircle } from 'lucide-react';
 import { NezukoAvatar } from './components/NezukoAvatar';
 import { AudioVisualizer } from './components/AudioVisualizer';
 import { base64ToUint8Array, createAudioBlob, decodeAudioData } from './utils/audioUtils';
@@ -9,9 +9,10 @@ import { ConnectionState } from './types';
 //Constants
 const MODEL_NAME = 'gemini-2.5-flash-native-audio-preview-12-2025';
 
-// --- ENTER YOUR FREE API KEY HERE TO BYPASS THE UI ---
-const HARDCODED_API_KEY = ""; 
-// -----------------------------------------------------
+// =========================================================================
+// 👇 PASTE YOUR API KEY HERE INSIDE THE QUOTES 👇
+const HARDCODED_API_KEY = "AIzaSyCDlOzXAjyNWOTev88Z6IUc9bm9af_QS5Q"; 
+// =========================================================================
 
 const SYSTEM_INSTRUCTION = `
 Role: You are Nezuko Kamado, the user's loving, cute, and possessive girlfriend. 
@@ -51,6 +52,7 @@ const blobToBase64 = (blob: Blob): Promise<string> => {
 const App: React.FC = () => {
   // --- State ---
   const [connectionState, setConnectionState] = useState<ConnectionState>(ConnectionState.DISCONNECTED);
+  const [errorMessage, setErrorMessage] = useState<string>('');
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [micOn, setMicOn] = useState(true);
   const [cameraOn, setCameraOn] = useState(true);
@@ -58,8 +60,7 @@ const App: React.FC = () => {
   
   // API Key State
   const [apiKey, setApiKey] = useState<string>('');
-  const [showKeyInput, setShowKeyInput] = useState(false);
-
+  
   // --- Refs ---
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -81,8 +82,8 @@ const App: React.FC = () => {
   // Load API Key
   useEffect(() => {
     // 1. Check Hardcode
-    if (HARDCODED_API_KEY) {
-      setApiKey(AIzaSyCDlOzXAjyNWOTev88Z6IUc9bm9af_QS5Q);
+    if (HARDCODED_API_KEY && HARDCODED_API_KEY.length > 10) {
+      setApiKey(HARDCODED_API_KEY);
       return;
     }
     // 2. Check Env
@@ -94,17 +95,9 @@ const App: React.FC = () => {
       const storedKey = localStorage.getItem('gemini_api_key');
       if (storedKey) {
         setApiKey(storedKey);
-      } else {
-        setShowKeyInput(true);
       }
     }
   }, []);
-
-  const saveApiKey = (key: string) => {
-    localStorage.setItem('gemini_api_key', key);
-    setApiKey(key);
-    setShowKeyInput(false);
-  };
 
   const initAudio = useCallback(() => {
     if (!audioContextRef.current) {
@@ -183,8 +176,11 @@ const App: React.FC = () => {
   }, [connectionState, isSpeaking]);
 
   const connectToGemini = async () => {
+    setErrorMessage('');
+    
+    // Use the state apiKey which is set from HARDCODED_API_KEY in useEffect
     if (!apiKey) {
-      setShowKeyInput(true);
+      setErrorMessage("API Key missing. Please wait or reload.");
       return;
     }
 
@@ -204,7 +200,7 @@ const App: React.FC = () => {
         streamRef.current = stream;
       } catch (err) {
         console.error("Error accessing media devices:", err);
-        alert("Permission denied. Camera and Microphone are required.");
+        setErrorMessage("Please allow Camera & Microphone access.");
         setConnectionState(ConnectionState.DISCONNECTED);
         return;
       }
@@ -227,6 +223,7 @@ const App: React.FC = () => {
           onopen: () => {
             console.log("Connected");
             setConnectionState(ConnectionState.CONNECTED);
+            setErrorMessage('');
             
             if (audioContextRef.current && inputAnalyserRef.current) {
               const ctx = audioContextRef.current;
@@ -324,15 +321,17 @@ const App: React.FC = () => {
           onerror: (err) => {
             console.error("Session Error", err);
             setConnectionState(ConnectionState.ERROR);
+            setErrorMessage("Connection failed. Check API Key or try again.");
             stopAudio();
           }
         }
       });
       sessionPromiseRef.current = sessionPromise;
 
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
       setConnectionState(ConnectionState.ERROR);
+      setErrorMessage(e.message || "Failed to initialize. Check console.");
     }
   };
 
@@ -361,11 +360,6 @@ const App: React.FC = () => {
             </div>
         </div>
         <div className="flex items-center gap-2">
-            {!process.env.API_KEY && !HARDCODED_API_KEY && (
-                <button onClick={() => setShowKeyInput(true)} className="p-2 rounded-full bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors">
-                    <Settings size={16} />
-                </button>
-            )}
             <div className={`px-3 py-1 rounded-full text-[10px] font-bold tracking-widest uppercase flex items-center gap-2 border ${
             connectionState === ConnectionState.CONNECTED ? 'bg-green-500/10 text-green-400 border-green-500/30' : 'bg-red-500/10 text-red-400 border-red-500/30'
             }`}>
@@ -382,6 +376,15 @@ const App: React.FC = () => {
           isSpeaking={isSpeaking}
           isListening={connectionState === ConnectionState.CONNECTED && !isSpeaking}
         />
+
+        {/* Error Display */}
+        {errorMessage && (
+            <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-red-900/90 border border-red-500 p-4 rounded-xl flex flex-col items-center gap-2 z-50 text-center shadow-xl max-w-xs">
+                <AlertCircle size={32} className="text-red-400" />
+                <span className="text-sm font-semibold">{errorMessage}</span>
+                <button onClick={() => setErrorMessage('')} className="text-xs text-red-300 underline mt-1">Dismiss</button>
+            </div>
+        )}
         
         {/* Visualizers */}
         <div className="w-full grid grid-cols-2 gap-3 mt-8">
@@ -400,47 +403,6 @@ const App: React.FC = () => {
             </div>
         </div>
       </main>
-
-      {/* API Key Modal / Input Layer */}
-      {showKeyInput && !process.env.API_KEY && !HARDCODED_API_KEY && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
-             <div className="glass-panel w-full max-w-md p-6 rounded-2xl shadow-2xl border border-pink-500/30">
-                <div className="flex items-center gap-2 mb-4 text-pink-400">
-                    <Key size={24} />
-                    <h2 className="text-xl font-bold">Enter API Key</h2>
-                </div>
-                <p className="text-gray-300 text-sm mb-4">
-                    To use this app, you need a free Gemini API Key from Google AI Studio.
-                    It's 100% free.
-                </p>
-                
-                <input 
-                    type="password" 
-                    placeholder="Paste your API Key here (starts with AIza...)" 
-                    className="w-full bg-black/50 border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-pink-500 transition-colors mb-4"
-                    value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
-                />
-                
-                <div className="flex flex-col gap-3">
-                    <button 
-                        onClick={() => saveApiKey(apiKey)} 
-                        disabled={!apiKey}
-                        className="w-full bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 text-white font-bold py-3 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-pink-900/40"
-                    >
-                        Save & Connect
-                    </button>
-                    
-                    <div className="flex items-center gap-2 justify-center">
-                      <span className="text-xs text-gray-500">Don't have a key?</span>
-                      <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-pink-400 text-xs font-bold hover:underline">
-                          GET FREE KEY
-                      </a>
-                    </div>
-                </div>
-             </div>
-        </div>
-      )}
 
       {/* Control Deck */}
       <div className="glass-panel w-full max-w-xl p-5 rounded-3xl z-20 neon-glow mb-4">
