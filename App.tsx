@@ -7,7 +7,8 @@ import { base64ToUint8Array, createAudioBlob, decodeAudioData } from './utils/au
 import { ConnectionState } from './types';
 
 //Constants
-const MODEL_NAME = 'gemini-2.5-flash-native-audio-preview-12-2025';
+// Switched to the standard experimental model which is more stable for Live API
+const MODEL_NAME = 'gemini-2.0-flash-exp';
 
 // =========================================================================
 // 👇 API KEY
@@ -71,6 +72,7 @@ const App: React.FC = () => {
   
   const nextStartTimeRef = useRef<number>(0);
   const frameIntervalRef = useRef<number | null>(null);
+  const silenceIntervalRef = useRef<number | null>(null);
   const lastVoiceActivityRef = useRef<number>(Date.now());
   const sourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
   const sessionPromiseRef = useRef<Promise<any> | null>(null);
@@ -110,9 +112,6 @@ const App: React.FC = () => {
       outputAnalyserRef.current.fftSize = 256;
       outputAnalyserRef.current.smoothingTimeConstant = 0.5;
     }
-
-    if (audioContextRef.current?.state === 'suspended') audioContextRef.current.resume();
-    if (outputContextRef.current?.state === 'suspended') outputContextRef.current.resume();
   }, []);
 
   const stopAudio = useCallback(() => {
@@ -149,6 +148,28 @@ const App: React.FC = () => {
     }
   };
 
+  // Advanced Proactive Silence Handler
+  useEffect(() => {
+    silenceIntervalRef.current = window.setInterval(() => {
+      if (connectionState === ConnectionState.CONNECTED && !isSpeaking) {
+        const timeSinceLastActivity = Date.now() - lastVoiceActivityRef.current;
+        
+        // If silence > 5 seconds, we rely on the system instruction to kick in.
+        // We do NOT send text manually as 'session.send' is not supported in this SDK version
+        // The robust System Instruction "NEVER ALLOW SILENCE" will guide the model.
+        if (timeSinceLastActivity > 5000) {
+            // Optional: If the SDK supported it, we would ping here.
+            // For now, we rely on the continuous video feed to keep the session alive and the model's personality.
+            lastVoiceActivityRef.current = Date.now(); 
+        }
+      }
+    }, 1000);
+
+    return () => {
+      if (silenceIntervalRef.current) clearInterval(silenceIntervalRef.current);
+    }
+  }, [connectionState, isSpeaking]);
+
   const connectToGemini = async () => {
     setErrorMessage('');
     
@@ -157,7 +178,19 @@ const App: React.FC = () => {
       return;
     }
 
+    // 1. Initialize and Resume Audio Contexts IMMEDIATELY on user click
     initAudio();
+    try {
+        if (audioContextRef.current?.state === 'suspended') {
+            await audioContextRef.current.resume();
+        }
+        if (outputContextRef.current?.state === 'suspended') {
+            await outputContextRef.current.resume();
+        }
+    } catch (e) {
+        console.warn("Audio resume failed", e);
+    }
+
     setConnectionState(ConnectionState.CONNECTING);
     lastVoiceActivityRef.current = Date.now();
 
@@ -286,7 +319,8 @@ const App: React.FC = () => {
              
              if (message.serverContent?.interrupted) stopAudio();
           },
-          onclose: () => {
+          onclose: (e) => {
+            console.log("Session Closed", e);
             setConnectionState(ConnectionState.DISCONNECTED);
             stopAudio();
           },
