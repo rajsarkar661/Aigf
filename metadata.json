@@ -1,0 +1,8 @@
+{
+  "name": "AI Nezuko Girlfriend",
+  "description": "An interactive AI girlfriend experience featuring Nezuko Kamado using Gemini Multimodal Live API for real-time voice and video interaction.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
